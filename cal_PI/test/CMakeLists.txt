@@ -1,15 +1,19 @@
-# 查找 GTest 库
+# GTest
 find_package(GTest REQUIRED)
-# GTest 的头文件
 include_directories(${GTEST_INCLUDE_DIRS})
 
+# GMP
+find_package(GMP REQUIRED)
+include_directories(${GMP_INCLUDE_DIR})
+
 # add_executable 要放在 target_link_libraries 前面
-add_executable(unit_test Test_cal_PI.cpp)
+add_executable(unit_test Test_cal_PI.cpp ../src/cal_PI.cpp ../src/cal_PI.h)
 
 # 链接测试库
 target_link_libraries( unit_test
         ${GTEST_BOTH_LIBRARIES}
-        pthread )
+        pthread 
+        ${GMP_LIBRARY} )
 
 
 # 添加到测试

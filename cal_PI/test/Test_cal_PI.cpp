@@ -1,8 +1,7 @@
 #include <gtest/gtest.h>
 #include <iostream>
+#include "../src/cal_PI.h"
 using namespace std;
-
-
 
 int main(int argc, char *argv[]){
     ::testing::InitGoogleTest(&argc, argv);
