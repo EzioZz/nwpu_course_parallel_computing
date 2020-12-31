@@ -55,29 +55,3 @@ double cal_PI(int argc, char** argv){
 
     return res;
 }
-
-
-// 出现错误的代码。
-// int main(int argc, char** argv){
-//     int size;
-//     int rank;
-//     MPI_Init(&argc, &argv);
-//     MPI_Comm_size(MPI_COMM_WORLD, &size);
-//     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-//     long long global_count_in_circle = 0;
-
-    // if(rank == 0){
-    //     double total_count_time = (double)count_time * (double) (size);
-    //     cout<<total_count_time<<endl;
-    //     cout<<global_count_in_circle<<endl;
-    // }
-    // else{
-    //     long long count_in_cirle = slave();
-    //     cout<<"id:"<<rank<<", count_in_cirle"<<count_in_cirle<<endl;
-    //     MPI_Reduce(&count_in_cirle, &global_count_in_circle, 1, MPI_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
-    // }
-//     MPI_Finalize();
-
-//     return 0;
-// }
