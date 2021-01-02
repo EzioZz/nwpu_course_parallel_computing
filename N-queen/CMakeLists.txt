@@ -17,5 +17,5 @@ IF(OPENMP_FOUND)
     # SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
 ENDIF()
 
-# add_executable(${PROJECT_NAME}  src/main.cpp src/n-queen.h src/n-queen.cpp src/stopwatch.cpp src/stopwatch.h)
-add_executable(${PROJECT_NAME} src/MPI_N_queen.cpp)
+add_executable(${PROJECT_NAME}  src/main.cpp src/n-queen.h src/n-queen.cpp src/stopwatch.cpp src/stopwatch.h)
+# add_executable(${PROJECT_NAME} src/MPI_N_queen.cpp)

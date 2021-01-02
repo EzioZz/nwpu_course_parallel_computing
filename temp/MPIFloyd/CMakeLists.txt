@@ -17,7 +17,5 @@ set(CMAKE_C_COMPILER MPIC)
 # set(CMAKE_CXX_COMPILER g++)
 # set(CMAKE_C_COMPILER gcc)
 
-add_executable(${PROJECT_NAME} src/main.cpp)
+# add_executable(${PROJECT_NAME} src/main.cpp)
 add_executable(test src/test.cpp)
-
-target_link_libraries(${PROJECT_NAME} ${GMP_LIBRARY})

@@ -1,10 +1,19 @@
+#ifndef _FLOYD_H
+#define _FLOYD_H
+
+
 #include <vector>
 #include <algorithm>
+#include <mpi.h>
+#include <stdio.h>
+#include <iostream>
+#include <random>
+#include <fstream>
 
 using namespace std;
 
-typedef vector<vector<int> > Mat;
+typedef int** Mat;
 
-void SerialFloyd(Mat &mat);
-void OpenMPFloyd(Mat &mat);
-void MPIFloyd(Mat &mat);
+int MPIFloyd(Mat &mat, int argc, char** argv);
+
+#endif
