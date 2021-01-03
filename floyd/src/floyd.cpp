@@ -31,7 +31,7 @@ int MPIFloyd(Mat &mat, int mat_size, int argc, char** argv){
     }
 
     if(p_thread == (num_threads - 1)){
-        // DataGenerator(mat_size);
+        DataGenerator(mat_size);
         ReadMatrixFile(mat, mat_size);
     }
     
@@ -50,6 +50,7 @@ int MPIFloyd(Mat &mat, int mat_size, int argc, char** argv){
         MPI_Bcast(mat[k], mat_size, MPI_INT, getOwnerThread(k, mat_size, num_threads), MPI_COMM_WORLD);
 
         for(int i = slice * p_thread; i < slice * (p_thread + 1); i++){
+#pragma omp parallel for
             for(int j = 0; j < mat_size; j++){
                 mat[i][j] = min(mat[i][j], mat[i][k] + mat[k][j]);
             }

@@ -11,9 +11,8 @@ Mat mat;
 
 int main(int argc, char **argv){
 
-    int mat_size = 2000;
+    int mat_size = 4000;
 
     MPIFloyd(mat, mat_size, argc, argv);
-
 
 }
