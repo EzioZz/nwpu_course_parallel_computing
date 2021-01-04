@@ -2,7 +2,7 @@ import random
 
 fout = open("in.txt", mode='w+')
 
-size = 40
+size = 10000000
 
 fout.write(str(size))
 fout.write("\n")

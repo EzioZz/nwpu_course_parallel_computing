@@ -18,7 +18,6 @@ int test(int* &pData, int &nData){
 
     free(pTest);
 
-
 }
 
 int* merge(int* pList0, int nList0, int* pList1, int nList1){
