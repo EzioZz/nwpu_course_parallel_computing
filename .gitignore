@@ -1,5 +1,7 @@
 */build/
 */.vscode/
+*/.idea/
+*/cmake-build-debug/
 .DS_Store
 floyd/in.txt
 temp/MPIFloyd/.vscode/launch.json

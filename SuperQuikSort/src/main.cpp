@@ -6,10 +6,47 @@
 
 using namespace std;
 
+int* merge(int* pList0, int nList0, int* pList1, int nList1){
+    int nRes = nList0 + nList1;
+    int* pRes = (int*)malloc(nRes * sizeof(int));
+    
+    int p0 = 0;
+    int p1 = 0;
+    int count = 0;
 
-void Partion(int threadBase, int threadSize, int* pData, int nData){
+    while(p0 < nList0 && p1 < nList1){
+        if(pList0[p0] <= pList1[p1]){
+            pRes[count] = pList0[p0];
+            p0++;
+            count++;
+        }
+        else{
+            pRes[count] = pList1[p1];
+            p1++;
+            count++;
+        }
+    }
+
+    while(p0 < nList0){
+        pRes[count] = pList0[p0];
+        p0++;
+        count++;
+    }
+
+    while(p1 < nList1){
+        pRes[count] = pList1[p1];
+        p1++;
+        count++;
+    }
+
+    return pRes;
+}
+
+
+void Partion(int threadBase, int threadSize, int* &pData, int &nData){
     // 应该是每个线程都独立调用这个函数，所有每个线程的pData值和nData值都是不同的。
     // threadBase和threadSize都只是在做线程组的划分，用于告诉调用该线程的函数，自己属于那个线程组。
+    // threadBase为开始编号，threadSize为线程组中线程的个数。
 
     if(threadSize == 1){
         // 该线程组中只有一个线程了，说明整个数组都已经都排序好了。
@@ -21,10 +58,6 @@ void Partion(int threadBase, int threadSize, int* pData, int nData){
     int rank; // 线程的编号
     MPI_Comm_size(MPI_COMM_WORLD, &num_threads);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-#ifdef LOG
-    cout<<"rank: "<<rank<<", pData[1]: "<<pData[1]; // 用于验证，每个线程都会独立调用
-#endif
 
     // 创建属于该线程组的通信器。
     int rankInGroup = rank - threadBase; // rankInGroup表示在线程组的中编号
@@ -39,8 +72,8 @@ void Partion(int threadBase, int threadSize, int* pData, int nData){
     MPI_Group localMPI_Group;
     MPI_Group_incl(world_group, threadSize, ranks, &localMPI_Group);
 
-    MPI_Comm locaMPI_Comm;
-    MPI_Comm_create(MPI_COMM_WORLD, localMPI_Group, &locaMPI_Comm);
+    MPI_Comm localMPI_Comm;
+    MPI_Comm_create(MPI_COMM_WORLD, localMPI_Group, &localMPI_Comm);
 
 
 #ifdef LOG
@@ -51,10 +84,10 @@ void Partion(int threadBase, int threadSize, int* pData, int nData){
     int pivot;
     if(rankInGroup == 0){
         pivot = pData[nData / 2];
-        MPI_Bcast(&pivot, 1, MPI_INT, threadBase, locaMPI_Comm); // 在线程组的广播空间中进行广播
+        MPI_Bcast(&pivot, 1, MPI_INT, threadBase, localMPI_Comm); // 在线程组的广播空间中进行广播
     }
     else{
-        MPI_Bcast(&pivot, 1, MPI_INT, threadBase, locaMPI_Comm);
+        MPI_Bcast(&pivot, 1, MPI_INT, threadBase, localMPI_Comm);
     }
 
 #ifdef LOG
@@ -64,31 +97,90 @@ void Partion(int threadBase, int threadSize, int* pData, int nData){
     // 根据收到的pivot进行分割。
     int* firstBigIndex = upper_bound(pData, pData + nData, pivot); // 
 
-#ifdef LOG
-    cout<<"rank: "<<rank<<", firstBigIndex: "<<*firstBigIndex<<endl;
-#endif
-
-    int lower_size = (firstBigIndex - pData) / sizeof(int);
-    int upper_size = (nData - lower_size);
+    int nLower = (firstBigIndex - pData); // 两个指针相减自己会除sizeof(int)
+    int nUpper = (nData - nLower);
 
 #ifdef LOG
     cout<<"rank: "<<rank<<", firstBigIndex: "<<*firstBigIndex<<endl;
+    cout<<"rank: "<<rank<<", firstBigIndex at location "<<(firstBigIndex - pData)<<endl;
+    cout<<"rank: "<<rank<<", nLower = "<<nLower<<", nUpper = "<<nUpper<<endl;
 #endif
 
-    int* lower = (int*)malloc(lower_size * sizeof(int));
-    int* upper = (int*)malloc(upper_size * sizeof(int));
+    int* pLower = (int*)malloc(nLower * sizeof(int));
+    int* pUpper = (int*)malloc(nUpper * sizeof(int));
 
-    memcpy(lower, pData, lower_size);
-    memcpy(upper, firstBigIndex, upper_size);
+    memcpy(pLower, pData, nLower);
+    memcpy(pUpper, firstBigIndex, nUpper);
 
     // 清空pData中的内存
     free(pData);
     pData = NULL;
+    nData = 0;
 
     // 进行节点间的数据交换与合并
     int step = threadSize / 2; // threadSize是2^n
+    
+    int* pNewLower;
+    int nNewLower;
 
+    int* pNewUpper;
+    int nNewUpper;
+    
+    // 进行同一线程组内，上下两部分的交换和合并操作。
+    MPI_Status* status;
+    if(rankInGroup < threadSize / 2){
+#ifdef LOG
+        cout<<"small rank: "<<rank<<" want!! recv nNewLower =  "<<nNewLower<<", from "<<rank + step<<endl;
+#endif
+        MPI_Recv(&nNewLower, 1, MPI_INT, rank + step, 0, MPI_COMM_WORLD, status);
+#ifdef LOG
+        cout<<"small rank: "<<rank<<" have!! recv nNewLower =  "<<nNewLower<<", from "<<rank + step<<endl;
+#endif
+        pNewLower = (int*)malloc(sizeof(int) * nNewLower);
+        MPI_Recv(pNewLower, nNewLower, MPI_INT, rank + step, 0, MPI_COMM_WORLD, status);
 
+        MPI_Send(&nUpper, 1, MPI_INT, rank + step, 0, MPI_COMM_WORLD);
+        MPI_Send(pUpper, nUpper, MPI_INT, rank + step, 0, MPI_COMM_WORLD);
+
+        // 这里进行 Lower和NewLower 的合并
+        pData = merge(pLower, nLower, pNewLower, nNewLower);
+        nData = nLower + nNewLower;
+    }
+    else{
+        MPI_Send(&nLower, 1, MPI_INT, rank - step, 0, MPI_COMM_WORLD);
+        MPI_Send(pLower, nLower, MPI_INT, rank - step, 0, MPI_COMM_WORLD);
+
+        MPI_Recv(&nNewUpper, 1, MPI_INT, rank - step, 0, MPI_COMM_WORLD, status);
+        pNewUpper = (int*)malloc(sizeof(int) * nNewUpper);
+        MPI_Recv(pNewUpper, nNewUpper, MPI_INT, rank - step, 0, MPI_COMM_WORLD, status);
+
+        // 这里进行 Upper和NewUpper的合并
+        pData = merge(pUpper, nUpper, pNewUpper, nNewUpper);
+        nData = nUpper + nNewUpper;
+    #ifdef LOG
+        cout<<"big rank: "<<rank<<", nData = "<<nData<<endl;
+#endif
+    }
+
+#ifdef LOG
+    cout<<"partion结束，rank: "<<rank<<", nData = "<<nData<<endl;
+#endif
+
+    if(localMPI_Group != MPI_GROUP_NULL) MPI_Group_free(&localMPI_Group);
+    if(localMPI_Comm != MPI_COMM_NULL) MPI_Comm_free(&localMPI_Comm);
+
+    free(pLower); pLower = NULL;
+    free(pUpper); pUpper = NULL;
+    free(pNewLower); pNewLower = NULL;
+    free(pNewUpper); pNewUpper = NULL;
+
+    // 线程组的分裂
+    // if(rankInGroup < threadSize / 2){
+    //     Partion(threadBase, threadSize / 2, pData, nData);
+    // }
+    // else{
+    //     Partion(threadBase + threadSize / 2, threadSize / 2, pData, nData);
+    // }
 
 }
 
@@ -126,20 +218,19 @@ int main(int argc, char** argv){
     slice = length / num_threads; // num_threads 为 2^n，我的电脑只有4个。。。
 
     int* pData;
+    int nData;
     pData = (int*)malloc(slice * sizeof(int));
     memcpy(pData, vec + (slice * rank), slice * sizeof(int));
 
     sort(pData, pData + slice);
 
 #ifdef LOG
-    if(rank == 0){
-        cout<<"slice: "<<slice<<endl;
-        cout<<"rank: "<<rank<<endl;
-        for(int i = 0; i < slice; i++){
-            cout<<"("<<i<<","<<pData[i]<<")";
-        }
-        cout<<endl;
+    cout<<"slice: "<<slice;
+    cout<<"rank: "<<rank<<":";
+    for(int i = 0; i < slice; i++){
+        cout<<"("<<i<<","<<pData[i]<<") ";
     }
+    cout<<endl;
 #endif
 
     if(rank != 0){
@@ -147,7 +238,55 @@ int main(int argc, char** argv){
         vec = NULL;
     }
 
-    Partion(0, num_threads, pData, slice);
+    nData = slice;
+    Partion(0, num_threads, pData, nData);
+
+#ifdef LOG 
+    cout<<"partion结束, 返回main函数"<<endl;
+#endif
+
+
+    // 按照线程rank的顺序进行输出
+    int write_signal = 0;
+    MPI_Status status;
+    ofstream fout;
+
+    if(rank == 0){
+        fout.open("../out.txt", ios::out);
+        fout<<"rank："<<rank<<"的输出"<<endl;
+        for(int i = 0; i < nData; i++){
+            fout<<pData[i]<<" ";
+        }
+        fout<<endl;
+        
+        for(int dst_thread = 1; dst_thread < num_threads; dst_thread++){
+            MPI_Send(&write_signal, 1, MPI_INT, dst_thread, 0, MPI_COMM_WORLD);
+
+#ifdef LOG 
+            cout<<rank<<": want "<<dst_thread<<" print"<<endl;
+#endif
+
+            MPI_Recv(&write_signal, 1, MPI_INT, dst_thread, 0, MPI_COMM_WORLD, &status);
+
+#ifdef LOG
+            cout<<rank<<": "<<dst_thread<<" print finish"<<endl;
+#endif
+        }
+        
+    }
+    else{
+        fout.open("../out.txt", ios::out | ios::app);
+        MPI_Recv(&write_signal, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &status);
+        fout<<"rank："<<rank<<"的输出"<<endl;
+        for(int i = 0; i < nData; i++){
+            fout<<pData[i]<<" ";
+        }
+        fout<<endl;
+        
+        MPI_Send(&write_signal, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+    }
+    
+
 
 
     MPI_Finalize();
