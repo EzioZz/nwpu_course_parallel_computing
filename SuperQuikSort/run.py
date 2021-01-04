@@ -2,9 +2,9 @@ import random
 
 fout = open("in.txt", mode='w+')
 
-size = 1000
+size = 40
 
-fout.write(str(1000))
+fout.write(str(size))
 fout.write("\n")
 
 for i in range(size):
