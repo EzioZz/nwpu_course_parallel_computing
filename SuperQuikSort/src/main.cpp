@@ -16,6 +16,7 @@ int* merge(int* pList0, int nList0, int* pList1, int nList1){
 
     while(p0 < nList0 && p1 < nList1){
         if(pList0[p0] <= pList1[p1]){
+
             pRes[count] = pList0[p0];
             p0++;
             count++;
@@ -38,6 +39,8 @@ int* merge(int* pList0, int nList0, int* pList1, int nList1){
         p1++;
         count++;
     }
+
+    
 
     return pRes;
 }
@@ -239,7 +242,131 @@ int main(int argc, char** argv){
     }
 
     nData = slice;
-    Partion(0, num_threads, pData, nData);
+    
+    // Partion(0, num_threads, pData, nData);
+    // 换一种partion的方法
+    int threadBase = 0;
+    int threadSize = num_threads;
+
+    int rankInGroup = rank - threadBase; // rankInGroup表示在线程组的中编号
+    int ranks[threadSize];
+    for(int i = 0; i < threadSize; i++){
+        ranks[i] = threadBase + i;
+    }
+
+    MPI_Group world_group; 
+    MPI_Comm_group(MPI_COMM_WORLD, &world_group);
+    
+    MPI_Group localMPI_Group;
+    MPI_Group_incl(world_group, threadSize, ranks, &localMPI_Group);
+
+    MPI_Comm localMPI_Comm;
+    MPI_Comm_create(MPI_COMM_WORLD, localMPI_Group, &localMPI_Comm);
+
+
+// #ifdef LOG
+//     cout<<"rank: "<<rank<<", rankInGroup: "<<rankInGroup<<endl;
+// #endif
+
+    // 线程组中的0号（也就是threadBase）进行广播pivot
+    int pivot;
+    if(rankInGroup == 0){
+        pivot = pData[nData / 2];
+        MPI_Bcast(&pivot, 1, MPI_INT, threadBase, localMPI_Comm); // 在线程组的广播空间中进行广播
+    }
+    else{
+        MPI_Bcast(&pivot, 1, MPI_INT, threadBase, localMPI_Comm);
+    }
+
+// #ifdef LOG
+//     cout<<"rank: "<<rank<<", pivot: "<<pivot<<endl;
+// #endif
+
+    // 根据收到的pivot进行分割。
+    int* firstBigIndex = upper_bound(pData, pData + nData, pivot); // 
+
+    int nLower = (firstBigIndex - pData); // 两个指针相减自己会除sizeof(int)
+    int nUpper = (nData - nLower);
+
+// #ifdef LOG
+//     cout<<"rank: "<<rank<<", firstBigIndex: "<<*firstBigIndex<<endl;
+//     cout<<"rank: "<<rank<<", firstBigIndex at location "<<(firstBigIndex - pData)<<endl;
+//     cout<<"rank: "<<rank<<", nLower = "<<nLower<<", nUpper = "<<nUpper<<endl;
+// #endif
+
+    int* pLower = (int*)malloc(nLower * sizeof(int));
+    int* pUpper = (int*)malloc(nUpper * sizeof(int));
+
+    memcpy(pLower, pData, nLower * sizeof(int));
+    memcpy(pUpper, firstBigIndex, nUpper * sizeof(int));
+
+    // 清空pData中的内存
+    free(pData);
+    pData = NULL;
+    nData = 0;
+
+    // 进行节点间的数据交换与合并
+    int step = threadSize / 2; // threadSize是2^n
+    
+    int* pNewLower;
+    int nNewLower;
+
+    int* pNewUpper;
+    int nNewUpper;
+    
+    // 进行同一线程组内，上下两部分的交换和合并操作。
+    MPI_Status* status;
+    if(rankInGroup < threadSize / 2){
+#ifdef LOG
+        cout<<"small rank: "<<rank<<" want!! recv nNewLower =  "<<nNewLower<<", from "<<rank + step<<endl;
+#endif
+        MPI_Recv(&nNewLower, 1, MPI_INT, rank + step, MPI_ANY_TAG, MPI_COMM_WORLD, status);
+#ifdef LOG
+        cout<<"small rank: "<<rank<<" have!! recv nNewLower =  "<<nNewLower<<", from "<<rank + step<<endl;
+#endif
+        pNewLower = (int*)malloc(sizeof(int) * nNewLower);
+        MPI_Recv(pNewLower, nNewLower, MPI_INT, rank + step, MPI_ANY_TAG, MPI_COMM_WORLD, status);
+
+        MPI_Send(&nUpper, 1, MPI_INT, rank + step, 0, MPI_COMM_WORLD);
+        MPI_Send(pUpper, nUpper, MPI_INT, rank + step, 0, MPI_COMM_WORLD);
+
+        // 这里进行 Lower和NewLower 的合并
+        pData = merge(pLower, nLower, pNewLower, nNewLower);
+        nData = nLower + nNewLower;
+#ifdef LOG
+        cout<<"small rank: "<<rank<<", nData = "<<nData<<endl;
+#endif
+    }
+    else{
+        MPI_Send(&nLower, 1, MPI_INT, rank - step, 0, MPI_COMM_WORLD);
+#ifdef LOG
+        cout<<"big rank: "<<rank<<"send nLower =  "<<nLower<<", to "<<rank - step<<endl;
+#endif
+        MPI_Send(pLower, nLower, MPI_INT, rank - step, 0, MPI_COMM_WORLD);
+
+        MPI_Recv(&nNewUpper, 1, MPI_INT, rank - step, MPI_ANY_TAG, MPI_COMM_WORLD, status);
+        pNewUpper = (int*)malloc(sizeof(int) * nNewUpper);
+        MPI_Recv(pNewUpper, nNewUpper, MPI_INT, rank - step, MPI_ANY_TAG, MPI_COMM_WORLD, status);
+
+        // 这里进行 Upper和NewUpper的合并
+        pData = merge(pUpper, nUpper, pNewUpper, nNewUpper);
+        nData = nUpper + nNewUpper;
+#ifdef LOG
+        cout<<"big rank: "<<rank<<", nData = "<<nData<<endl;
+#endif
+    }
+
+#ifdef LOG
+    cout<<"partion结束，rank: "<<rank<<", nData = "<<nData<<endl;
+#endif
+
+    // if(localMPI_Group != MPI_GROUP_NULL) MPI_Group_free(&localMPI_Group);
+    // if(localMPI_Comm != MPI_COMM_NULL) MPI_Comm_free(&localMPI_Comm);
+
+    // free(pLower); pLower = NULL;
+    // free(pUpper); pUpper = NULL;
+    // free(pNewLower); pNewLower = NULL;
+    // free(pNewUpper); pNewUpper = NULL;
 
 #ifdef LOG 
     cout<<"partion结束, 返回main函数"<<endl;
@@ -248,12 +375,11 @@ int main(int argc, char** argv){
 
     // 按照线程rank的顺序进行输出
     int write_signal = 0;
-    MPI_Status status;
     ofstream fout;
 
     if(rank == 0){
         fout.open("../out.txt", ios::out);
-        fout<<"rank："<<rank<<"的输出"<<endl;
+        fout<<"rank："<<rank<<"的输出, size = "<<nData<<endl;
         for(int i = 0; i < nData; i++){
             fout<<pData[i]<<" ";
         }
@@ -266,7 +392,7 @@ int main(int argc, char** argv){
             cout<<rank<<": want "<<dst_thread<<" print"<<endl;
 #endif
 
-            MPI_Recv(&write_signal, 1, MPI_INT, dst_thread, 0, MPI_COMM_WORLD, &status);
+            MPI_Recv(&write_signal, 1, MPI_INT, dst_thread, 0, MPI_COMM_WORLD, status);
 
 #ifdef LOG
             cout<<rank<<": "<<dst_thread<<" print finish"<<endl;
@@ -276,8 +402,8 @@ int main(int argc, char** argv){
     }
     else{
         fout.open("../out.txt", ios::out | ios::app);
-        MPI_Recv(&write_signal, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &status);
-        fout<<"rank："<<rank<<"的输出"<<endl;
+        MPI_Recv(&write_signal, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, status);
+        fout<<"rank："<<rank<<"的输出, size = "<<nData<<endl;
         for(int i = 0; i < nData; i++){
             fout<<pData[i]<<" ";
         }
