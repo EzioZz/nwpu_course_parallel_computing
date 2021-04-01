@@ -17,7 +17,7 @@ set(CMAKE_C_COMPILER MPIC)
 # set(CMAKE_CXX_COMPILER g++)
 # set(CMAKE_C_COMPILER gcc)
 
-add_executable(${PROJECT_NAME} src/cal_PI.cpp src/cal_PI.h src/main.cpp)
+add_executable(${PROJECT_NAME} src/cal_PI.cpp src/cal_PI.h src/stopwatch.cpp src/stopwatch.h src/main.cpp)
 
 target_link_libraries(${PROJECT_NAME} ${GMP_LIBRARY})
 

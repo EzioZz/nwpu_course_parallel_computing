@@ -79,7 +79,7 @@
 
 \thispagestyle{fancy}
 
-\section{实验内容}
+\section{实验目的}
 
 1.熟悉MPI编程环境，掌握MPI编程基本函数及MPI的相关通信函数用法，掌握MPI的主从模式及对等模式编程；
 
@@ -95,14 +95,55 @@ ubuntu18.04，inteli7-7700HK 4核8线程，gcc8.2，OpenMPI 4.2.0。使用CMake�
 
 \subsubsection{算法原理}
 
+算法的原理比较简单，在第一象限上的单位正方形内随机放点，落在单位圆内的点的个数 / 点的总个数 = $\pi$ / 4。
 
+多个线程并行的进行多次投掷，然后reduce到一个线程上。
 
 \subsubsection{实验步骤}
+（1）写CMakelists，配置编译环境
+
+（2）编写代码主要有几个模块：
+\quad 1.随机数生成模块，需要阻止每个线程生成相同的随机数序列 \\
+\quad 2.为了保证运算精度我用了大数运算的库（受限于电脑性能，我最后没到达那个精度） \\
+\quad 3.主线程进行reduce求和 \\
+
 
 \subsubsection{运行结果}
 
+运行结果如图\ref{pi结果图}所示。
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=.6\textwidth]{assets/cal_PI.png}
+    \caption{计算$\pi$值算法的运行结果图}
+    \label{pi结果图}
+\end{figure}
+
 \subsubsection{算法分析}
-分析不同n值、P值以及不同有序度时算法的运行时间，进行算法并行性能和可扩展性分析。（*）
+
+\begin{table}[htbp]
+    \centering
+    \caption{并行计算$\pi$运行结果}
+        \begin{tabular}{|c|c|c|c|c|c|}
+        \hline
+          &  & \multicolumn{2}{|c|}{线程为2} & \multicolumn{2}{|c|}{线程为4} \\ \cline{3-6}
+        模拟次数 & 线程数为1的运行时间 & 运行时间 & 加速比 & 运行时间 & 加速比 \\
+        \hline
+        1000000 & 12287 ms & 7508 ms & 1.636 & 5825 ms & 2.109 \\
+        \hline
+        5000000 & 69005 ms & 40313 ms & 1.711 & 30667 mss & 2.250 \\
+        \hline
+        \end{tabular}
+    \label{pi_table}
+\end{table}
+
+\paragraph{并行性能分析}
+
+算法随不同n和p的值性能如表\ref{pi_table}所示。随着数据量的增加，加速比有所提高。
+
+\paragraph{算法可扩展性分析}
+
+算法对处理器上限没有要求，随着处理器的个数增多，可以扩大问题的计算范围$\pi$的精度也会有所提高。
 
 \subsection{Floyd并行算法}
 
@@ -209,19 +250,116 @@ ubuntu18.04，inteli7-7700HK 4核8线程，gcc8.2，OpenMPI 4.2.0。使用CMake�
     \label{使用openmp+MPI混合编程}
 \end{figure}
 
+\subsection{超快速并行算法}
+
+\subsubsection{算法原理}
+
+我这里举一个8线程情况时候的例子，就比较容易理解算法原理。
+
+（1）首先将数组平均分给8个线程。每个线程分别进行快速排序。这样就得到了8个有序子数组，下面分别用0, 1, 2, ..., 7来表示
+
+（2）此时（0，1，2，3，4，5，6，7）在同一线程组中，0号线程将自己的中位数pivot广播。
+
+（3）每个线程根据0号线程广播的pivot，将本线程中的子数组进行划分，分为大的一部分upper和小的一部分lower。
+
+（4）0和4，1和5，2和6，3和7交换两个部分。比如，0号线程拿0和4中的lower，进行归并。4号线程拿0和4中的upper，进行归并
+
+（5）结果就有，（0，1，2，3） < (4，5，6，7)中的元素，拆分成了两个线程组。对每个线程组重复步骤（2）到步骤（5）的操作
+
+（6）结果依次有（0，1）< (2，3) < （4，5） < （6，7）
+
+（7）最后有 （0） < （1） < （2）< （3）< （4）< （5） < （6）< （7）
+
+
+\subsubsection{实验步骤}
+
+按照上面的算法原理编写代码实现即可。
+
+
+\subsubsection{运行结果}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=.8\textwidth]{assets/SuperQuickSort.png}
+    \caption{超快速并行排序命令行运行结果图}
+    \label{超快速并行排序}
+\end{figure}
+
+
+\subsubsection{算法分析}
+
+\paragraph{并行性能分析}
+
+\begin{table}[htbp]
+    \centering
+    \caption{并行计算$\pi$运行结果}
+        \begin{tabular}{|c|c|c|c|c|c|}
+        \hline
+          &  & \multicolumn{2}{|c|}{线程为2} & \multicolumn{2}{|c|}{线程为4} \\ \cline{3-6}
+        模拟次数 & 线程数为1的运行时间 & 运行时间 & 加速比 & 运行时间 & 加速比 \\
+        \hline
+        1e6 & 0.28186s & 0.267679s & 1.053 & 0.259043s & 1.088 \\
+        \hline
+        1e7 & 2.76637s & 3.25229s & 0.852 & 3.14133s & 1.035 \\
+        \hline
+        \end{tabular}
+    \label{pi_table}
+\end{table}
+
+很遗憾没能写出并行性能很好的算法，初步怀疑是IO数据量大的问题，或者我的代码没有优化好。
+
+
+\paragraph{算法的可扩展性分析}
+
+线程数的扩展能力较强。
+
+
 
 \subsection{N皇后问题并行算法}
 
 \subsubsection{算法原理}
 
+算法比较简单，一个典型的DFS问题，可以在搜索的每个分之上进行并行。这里我使用openmp进行编程。
+
 \subsubsection{运行结果}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=.6\textwidth]{assets/n-queen-performance.png}
+    \caption{N皇后程序运行截图}
+    \label{N皇后程序运行截图}
+\end{figure}
 
 \subsubsection{算法分析}
 分析不同n值、P值以及不同有序度时算法的运行时间，进行算法并行性能和可扩展性分析。（*）
 
+\paragraph{并行性能分析}
+
+\begin{table}[htbp]
+    \centering
+    \caption{棋盘大小为12时的性能}
+        \begin{tabular}{c|c|c}
+        \hline
+        线程个数 & 计算所用时间(ms) & 加速比 \\
+        1 & 1128ms & 1 \\
+        2 & 540ms & 2.08 \\
+        3 & 351ms & 3.21 \\
+        4 & 278ms & 4.05 \\
+        5 & 314ms & 3.59 \\
+        6 & 258ms & 4.37 \\
+        7 & 264ms & 4.27 \\
+        8 & 264ms & 4.27 \\
+        \end{tabular}
+    \label{n-queen-performance}
+\end{table}
+
+\paragraph{算法的可扩展性分析}
+
+目前算法扩展的线程上限数量为棋盘的大小。
+
 \section{实验总结}
 
-
+通过思考并行算法，以及编程实现，我在复习课堂上的基础知识的同时，也提升了我的动手能力。让我进一步掌握了，OpenMP、MPI这两个并行计算的工具，以及混合编程的优势。
 
 \end{document}
 
